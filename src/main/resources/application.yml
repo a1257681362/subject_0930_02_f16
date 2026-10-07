@@ -46,6 +46,10 @@ aqua:
         connect-timeout-ms: 3000
         read-timeout-ms: 5000
     outbox-scan-cron: "0 0/10 * * * ?"
+  # 水产监管月报（aqua-16）：每月 3 日 03:20 为上月各海区生成固化快照；
+  # 重新生成只产生新版本，失败任务保留异常链路等待 /api/aqua/report/jobs/{id}/retry。
+  report:
+    generate-scan-cron: "0 20 3 3 * ?"
 
 logging:
   level:

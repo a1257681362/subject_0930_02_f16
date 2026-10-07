@@ -230,3 +230,19 @@
 - 交叉核对同一行源：列表（`GET /persons`）、详情（`GET /persons/{id}`）、CSV 导出（`GET /persons/export`）共用同一 `loadRows` 查询与过滤口径，人员状态/证书统计三个出口一致；日志（`GET /api/aqua/qual/evidence`）按对象或 requestId 追溯全部写操作。
 
 验收：`mvn test -Dtest=PersonnelQualificationAcceptanceTest`，12 个检查点（CP0–CP11）逐段输出报告，失败即停并给出停点。
+
+## 水产监管月报（aqua-16）
+
+模块包路径 `com.evops.aqua.report`，打通：逐指标统计口径版本 → 手工/Quartz 按月按海区生成 → 五指标取数固化快照（缺采样标待补）→ 重新生成只产生新版本 → 查询/CSV 导出按海区权限过滤 → 失败任务保留异常链路与重试次数；海水养殖管理缺权时口径管理入口直接拒绝，换调用地址也不放行，全程留证。
+
+- **逐指标口径版本**（`POST /api/aqua/report/calibers`，requestId 幂等）：投苗量/用药量/死亡率/出池量/检验结论五个指标各自保存统计口径（取数表、时间字段、聚合方式、缺采样判定）；**发布只能产生新版本**（CAL-V1、CAL-V2…），旧版本自动 SUPERSEDED 冻结，版本与指标口径不可改；首次生成月报时系统自动建立 V1 默认口径。
+- **五指标汇总**：投苗量=月内投苗批次数量合计（尾）；用药量=月内 **APPROVED** 已审核领用单明细 estimated_qty 合计（草稿/待审核/驳回不计入）；死亡率=月内死亡登记合计/涉及批次在养数量合计×100；出池量=月内出池记录数量合计；检验结论=台账抽检 + 已提交放行检验轮次逐笔固化，汇总为 合格/不合格/其他 笔数。
+- **Quartz 生成即固化**（cron 由 `aqua.report.generate-scan-cron` 配置，默认每月 3 日 03:20 为上月各海区逐海区生成；`POST /api/aqua/report/jobs/scan` 手工触发同逻辑）：成功后快照头与每个指标行**同时固化当时口径版本号与口径 JSON**（`frozen=TRUE`），历史月报永远可还原当时口径。
+- **缺采样标待补不填零**：某月某海区某指标无任何采样数据时，指标值留空、`dataStatus=PENDING_FILL` 并写明原因，快照头 `pending_fill_count` 计数；CSV 导出同样写"待补(口径版本)"而非 0。
+- **重新生成只能产生新版本**：同 月份+海区 version_seq 递增（uk 唯一），旧快照行永不更新覆盖；详情可查同月份海区全部历史版本。
+- **导出按海区权限过滤**（`POST /api/aqua/report/sea-grants` 登记用户授权海区，`*` 为全部）：页面 JSON 与 `GET /api/aqua/report/monthly/export` 共用同一 `loadRows` 行源与同一过滤口径；无授权记录看不到任何海区，越海区详情 403，越海区导出无数据行。
+- **失败任务保留异常链路与重试次数**（`/api/aqua/report/jobs`）：每次尝试（含首次）写 `t_report_job_attempt`（异常类型/消息/堆栈），任务头保留 FAILED 终态、attempts 与 error_chain；快照事务独立回滚**不留半成品**，失败记账独立事务必留痕；`POST /{id}/retry` 只允许 FAILED 任务，attempts 递增、链路逐次追加，成功后历史失败尝试仍保留，非失败任务拒绝重试。
+- **缺权口径入口拒绝（换地址不放行）**：海水养殖管理权限收紧（`POST /api/aqua/feed/access/tighten`）后，Shiro 过滤链上的 `caliberAccess` 过滤器对 `/api/aqua/report/calibers/**`（含只读）在入口直接 403 并独立事务留证；控制器内另有一道**与 URL 无关的服务闸门**，任何内部转发/直调口径管理逻辑同样拒绝；收紧不影响月报查询、生成与导出。放开经 `/api/aqua/feed/access/relax`。
+- 全程留证：口径发布/停用、快照固化、任务成功/失败/重试、入口拒绝、海区授权、导出均写 `t_report_change_evidence`（含操作者、前后 JSON 快照、幂等请求号），可经 `GET /api/aqua/report/evidence` 按对象或 requestId 追溯。
+
+验收：`mvn test -Dtest=ReportMonthlyAcceptanceTest`，12 个检查点（CP0–CP11）逐段输出报告，失败即停并给出停点。

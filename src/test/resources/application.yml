@@ -43,6 +43,9 @@ aqua:
   qual:
     # 验收中手工 POST /api/aqua/qual/scan 驱动扫描，定时不真实触发
     scan-cron: "0 0 0 1 1 ? 2099"
+  report:
+    # 验收中手工 POST /api/aqua/report/jobs/scan 驱动月报生成，定时不真实触发
+    generate-scan-cron: "0 0 0 1 1 ? 2099"
 
 logging:
   level:
