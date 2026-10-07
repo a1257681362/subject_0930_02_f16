@@ -1,5 +1,6 @@
 package com.evops.common;
 
+import com.evops.aqua.supervision.service.SvAccessDeniedException;
 import org.apache.shiro.authc.AuthenticationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.validation.FieldError;
@@ -35,6 +36,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     public ApiResponse<Void> handleAuthentication(AuthenticationException ex) {
         return ApiResponse.fail("用户名或密码错误");
+    }
+
+    @ExceptionHandler(SvAccessDeniedException.class)
+    public ApiResponse<Void> handleSvAccessDenied(SvAccessDeniedException ex) {
+        return ApiResponse.fail(ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

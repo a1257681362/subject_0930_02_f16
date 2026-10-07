@@ -46,6 +46,10 @@ aqua:
         connect-timeout-ms: 3000
         read-timeout-ms: 5000
     outbox-scan-cron: "0 0/10 * * * ?"
+  # 水产监管月报（aqua-16）：每月1日03:00按海区生成当月月报；失败任务退避后由同一调度扫描重试
+  supervision:
+    monthly-cron: "0 0 3 1 * ?"
+    retry-backoff-seconds: 60
 
 logging:
   level:

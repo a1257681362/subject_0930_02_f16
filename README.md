@@ -230,3 +230,19 @@
 - 交叉核对同一行源：列表（`GET /persons`）、详情（`GET /persons/{id}`）、CSV 导出（`GET /persons/export`）共用同一 `loadRows` 查询与过滤口径，人员状态/证书统计三个出口一致；日志（`GET /api/aqua/qual/evidence`）按对象或 requestId 追溯全部写操作。
 
 验收：`mvn test -Dtest=PersonnelQualificationAcceptanceTest`，12 个检查点（CP0–CP11）逐段输出报告，失败即停并给出停点。
+
+## 水产监管月报（aqua-16）
+
+模块包路径 `com.evops.aqua.supervision`，在台账之上打通：五指标统计口径版本化 → Quartz/人工按月按海区生成月报并固化快照 → 缺采样数据标待补（不填零）→ 重新生成只产生新版本 → JSON/CSV 导出按海区权限过滤 → 失败任务保留完整异常链路与重试次数，全程留证；海水养殖管理缺权用户访问口径管理在服务层统一拒绝，换调用地址也不放行。
+
+- 统计口径版本（`POST /api/aqua/supervision/calibers`）：投苗量/用药量/死亡率/出池量/检验结论五指标必须逐指标配置数据源表/日期列/汇总表达式/单位/缺数规则；**新版本发布后旧版本自动停用**（同时仅一个 ACTIVE），已生成月报逐指标冻结 `caliber_version_id` 与口径 JSON 快照，历史月报永不回改。
+- 月报生成（Quartz `aqua.supervision.monthly-cron`，默认每月 1 日 03:00；人工 `POST /api/aqua/supervision/reports/generate`，requestId 强制幂等）：按报告期（yyyy-MM）+ 海区从台账五源表聚合；**生成在单事务内完成，整版 `snapshot_json` 固化**，任何异常整体回滚不留半成品；`POST /api/aqua/supervision/reports/retry-scan` 手工触发同逻辑扫描。
+- **缺少采样数据标待补而非填零**：某指标报告期内无任何源记录时，值留空、`data_status=PENDING_SUPPLEMENT` 并写明待补原因（0 是真实统计值，与数据缺失严格区分）；死亡率在有死亡采样但投苗量分母为 0/待补时同样标待补，不伪造 0%。
+- **重新生成只产生新版本**：同报告期+海区版本号递增，旧版取消 `current_flag` 但整版（头、指标行、快照）原样保留不删，可经 `currentOnly=false` 查历史版本。
+- **导出按海区权限过滤**（`GET /api/aqua/supervision/reports`、`/reports/{id}`、`/reports/export`）：用户授权海区存于 `t_sv_access_grant`（`*` 为全部海区），页面 JSON 与 CSV 共用同一行源、同一海区过滤口径；越权海区列表不可见、详情直接拒绝。
+- **失败任务保留异常链路与重试次数**（`t_sv_generate_task` + `t_sv_task_attempt`）：每次执行（含每次失败重试）追加一条明细，`attempts` 计执行次数、`retry_count` 计重试次数；`last_error` 保留异常类型与根因摘要，`error_stack` 保留完整 cause 链堆栈；未超 `max_retries`（默认 3）由调度按 `retry-backoff-seconds` 退避重试，成功后失败不留半成品版本，最终仅 1 个成功版本。失败/重试以独立事务留证，业务回滚不丢异常链。
+- **海水养殖管理缺权入口拒绝**：`caliber_manage_granted=0` 的用户访问「水产监管月报口径管理」在 `SvAccessService.requireCaliberManage` 服务层统一校验并留 `DENY` 证据——**正式入口 `/calibers` 与别名入口 `/caliber-manage/versions` 都被拦截，更换调用地址同样不放行**，读写口径配置均拒绝。系统内置受限用户 `marine/marine`（仅三沙湾海区、无口径管理权限）用于验收。
+- 全程留证：口径发布/停用、入口拒绝、月报生成、生成失败/重试均写 `t_sv_change_evidence`（含操作者、前后 JSON 快照、幂等请求号），可经 `GET /api/aqua/supervision/evidence` 按对象或 requestId 追溯。
+- 故障演练：`POST /api/aqua/supervision/failure-inject` 对指定报告期+海区注入/解除一次生成失败（带根因 cause 链），用于验收异常链路与重试恢复。
+
+验收：`mvn test -Dtest=SupervisionMonthlyReportAcceptanceTest`，11 个检查点（CP0–CP10）逐段输出报告，失败即停并给出停点。

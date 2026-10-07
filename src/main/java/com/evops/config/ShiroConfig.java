@@ -13,6 +13,8 @@ public class ShiroConfig {
     public Realm localRealm() {
         SimpleAccountRealm realm = new SimpleAccountRealm();
         realm.addAccount("bootstrap", "bootstrap", "system");
+        // 海水养殖管理受限用户：仅可见被授权海区、无监管月报口径管理权限（aqua-16 验收）
+        realm.addAccount("marine", "marine", "marine-manage");
         return realm;
     }
 

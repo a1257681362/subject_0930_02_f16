@@ -43,6 +43,10 @@ aqua:
   qual:
     # 验收中手工 POST /api/aqua/qual/scan 驱动扫描，定时不真实触发
     scan-cron: "0 0 0 1 1 ? 2099"
+  supervision:
+    # 验收中手工触发生成与重试扫描，月报定时不真实触发；失败重试退避置 0 立即重试
+    monthly-cron: "0 0 0 1 1 ? 2099"
+    retry-backoff-seconds: 0
 
 logging:
   level:
